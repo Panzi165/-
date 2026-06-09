@@ -235,16 +235,86 @@
             border-color: #f5c6cb;
             color: #721c24;
         }
+
+        /* 狀態提示 Modal */
+        .status-modal-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .status-modal-container.show {
+            display: flex;
+        }
+
+        .status-modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.5s ease;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .status-modal-content h2 {
+            font-size: 2em;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .status-modal-content p {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .status-modal-content button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .status-modal-content button:hover {
+            background: #764ba2;
+        }
+
+        /* 失敗樣式 */
+        .status-modal-content.failed {
+            border-left: 5px solid #dc3545;
+        }
+
+        .status-modal-content.failed h2 {
+            color: #dc3545;
+        }
+
+        /* 成功樣式 */
+        .status-modal-content.success {
+            border-left: 5px solid #28a745;
+        }
+
+        .status-modal-content.success h2 {
+            color: #28a745;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎢 電流急急棒遊戲 🎢</h1>
-        <span class="tech-badge">🐍 Python Flask 版本</span>
-        
-        <div class="server-status" id="serverStatus">
-            ✓ 伺服器連接中...
-        </div>
 
         <canvas id="gameCanvas" width="800" height="500"></canvas>
 
@@ -253,14 +323,6 @@
                 <div class="info-label">進度</div>
                 <div class="info-value" id="progress">0%</div>
             </div>
-            <div class="info-box">
-                <div class="info-label">與牆的距離</div>
-                <div class="info-value" id="distance">0px</div>
-            </div>
-            <div class="info-box">
-                <div class="info-label">高度</div>
-                <div class="info-value" id="height">0px</div>
-            </div>
         </div>
 
         <div class="status playing" id="status">✓ 準備好了！點擊畫面開始遊戲</div>
@@ -268,10 +330,8 @@
         <div class="instructions">
             <h3>📝 遊戲說明</h3>
             <ul>
-                <li>這是一條雲霄飛車式的路線，充滿彎道和高度變化</li>
-                <li>移動滑鼠，讓游標沿著路線從起點走到終點</li>
-                <li>不能碰到路線兩側的牆壁（棕色），否則遊戲失敗</li>
-                <li>成功到達終點即可通關並播放勝利音樂！</li>
+                <li>心情很好是吧，給你一點好玩的</li>
+                <li>不要撞到邊邊到達終點即可過關</li>
             </ul>
         </div>
     </div>
@@ -280,6 +340,15 @@
     <div class="fail-image-container" id="failImageContainer">
         <div class="fail-image-content" id="failImageContent">
             <button class="close-fail-image" onclick="closeFailImage()">✕</button>
+        </div>
+    </div>
+
+    <!-- 狀態提示 Modal -->
+    <div class="status-modal-container" id="statusModalContainer">
+        <div class="status-modal-content" id="statusModalContent">
+            <h2 id="statusModalTitle"></h2>
+            <p id="statusModalMessage"></p>
+            <button onclick="closeStatusModal()">點擊重試</button>
         </div>
     </div>
 
@@ -300,14 +369,15 @@
         const ctx = canvas.getContext('2d');
         const statusDiv = document.getElementById('status');
         const progressDiv = document.getElementById('progress');
-        const distanceDiv = document.getElementById('distance');
-        const heightDiv = document.getElementById('height');
         const failImageContainer = document.getElementById('failImageContainer');
         const failImageContent = document.getElementById('failImageContent');
+        const statusModalContainer = document.getElementById('statusModalContainer');
+        const statusModalContent = document.getElementById('statusModalContent');
+        const statusModalTitle = document.getElementById('statusModalTitle');
+        const statusModalMessage = document.getElementById('statusModalMessage');
         const backgroundMusic = document.getElementById('backgroundMusic');
         const successMusic = document.getElementById('successMusic');
         const scareMusic = document.getElementById('scareMusic');
-        const serverStatus = document.getElementById('serverStatus');
 
         // 遊戲狀態
         const gameState = {
@@ -336,22 +406,7 @@
             { x: 750, y: 150 }
         ];
 
-        // ===== 伺服器連接 =====
-        async function checkServerHealth() {
-            try {
-                const response = await fetch('/api/health');
-                const data = await response.json();
-                if (data.status === 'ok') {
-                    serverStatus.textContent = '✓ 伺服器已連接 (Python Flask)';
-                    serverStatus.className = 'server-status';
-                }
-            } catch (error) {
-                serverStatus.textContent = '✗ 伺服器連接失敗！';
-                serverStatus.className = 'server-status error';
-                console.error('伺服器連接錯誤:', error);
-            }
-        }
-
+        // ===== 音樂檢查 =====
         async function checkMusicAvailability() {
             try {
                 const response = await fetch('/api/check-music');
@@ -595,23 +650,15 @@
             const pathInfo = getPathSegmentAt(gameState.mouseX, gameState.mouseY);
 
             progressDiv.textContent = Math.min(Math.round(pathInfo.progress), 100) + '%';
-            distanceDiv.textContent = Math.round(pathInfo.distance) + 'px';
-            
-            if (pathInfo.segment) {
-                const currentY = pathInfo.point.y;
-                const heightValue = Math.round(500 - currentY);
-                heightDiv.textContent = heightValue + 'px';
-            }
 
             // 檢查是否碰到牆壁
             if (pathInfo.distance > gameState.pathWidth / 2) {
                 gameState.isFailed = true;
-                statusDiv.textContent = '✗ 遊戲失敗！撞到牆壁了！點擊畫面重試';
-                statusDiv.className = 'status failed';
                 
                 // 停止背景音樂，撥放驚嚇音樂
                 playScareMusic();
                 showFailImage();
+
             }
 
             // 檢查是否到達終點
@@ -619,8 +666,6 @@
             const distToEnd = Math.sqrt((gameState.mouseX - endPoint.x) ** 2 + (gameState.mouseY - endPoint.y) ** 2);
             if (distToEnd < 25) {
                 gameState.isSuccess = true;
-                statusDiv.textContent = '✓ 成功！你通過了！✨ 播放勝利音樂！';
-                statusDiv.className = 'status success';
                 
                 // 停止背景音樂，延遲 0.5 秒後撥放勝利音樂
                 stopBackgroundMusic();
@@ -631,7 +676,29 @@
                 // 保存成績
                 const finalScore = Math.round(pathInfo.progress);
                 saveGameScore(finalScore);
+                
+                // 顯示成功 Modal
+                showStatusModal('success', '✓ 成功！', '你通過了！✨ 播放勝利音樂！');
             }
+        }
+
+        function showStatusModal(type, title, message) {
+            statusModalTitle.textContent = title;
+            statusModalMessage.textContent = message;
+            statusModalContent.className = 'status-modal-content ' + type;
+            statusModalContainer.classList.add('show');
+        }
+
+        function closeStatusModal() {
+            statusModalContainer.classList.remove('show');
+            
+            gameState.isPlaying = false;
+            gameState.isFailed = false;
+            gameState.isSuccess = false;
+            progressDiv.textContent = '0%';
+            statusDiv.textContent = '✓ 準備好了！點擊綠球開始遊戲';
+            statusDiv.className = 'status playing';
+            closeFailImage('');
         }
 
         function playBackgroundMusic() {
@@ -693,7 +760,7 @@
                 
                 img.onload = function() {
                     failImageContent.innerHTML = `
-                        <button class="close-fail-image" onclick="closeFailImage()">✕</button>
+                        <button class="close-fail-image" onclick="closeFailImage('failed')">✕</button>
                         <img src="/static/images/${fileName}" alt="遊戲失敗">
                     `;
                     failImageContainer.classList.add('show');
@@ -710,8 +777,13 @@
             checkNextImage();
         }
 
-        window.closeFailImage = function() {
+        window.closeFailImage = function(type) {
             failImageContainer.classList.remove('show');
+            
+            // 如果是失敗類型，關掉圖片後顯示失敗 Modal
+            if (type === 'failed') {
+                showStatusModal('failed', '✗ 遊戲失敗！', '撞到牆壁了！點擊重試');
+            }
         };
 
         document.addEventListener('mousemove', (e) => {
@@ -721,19 +793,9 @@
         });
 
         canvas.addEventListener('click', function(e) {
-            if (gameState.isFailed || gameState.isSuccess) {
-                // 停止所有音樂
-                stopAllMusic();
-                
-                gameState.isPlaying = false;
-                gameState.isFailed = false;
-                gameState.isSuccess = false;
-                progressDiv.textContent = '0%';
-                distanceDiv.textContent = '0px';
-                heightDiv.textContent = '0px';
-                statusDiv.textContent = '✓ 準備好了！點擊畫面開始遊戲';
-                statusDiv.className = 'status playing';
-                closeFailImage();
+            // 如果 Modal 正在顯示，不響應 canvas 點擊
+            if (statusModalContainer.classList.contains('show')) {
+                return;
             }
             
             if (!gameState.isPlaying && !gameState.isFailed && !gameState.isSuccess) {
@@ -748,7 +810,6 @@
 
         // 初始化
         console.log('🎮 遊戲初始化...');
-        checkServerHealth();
         checkMusicAvailability();
         draw();
     </script>

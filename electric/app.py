@@ -3,7 +3,7 @@
 使用 Flask 作為後端伺服器
 """
 
-from flask import Flask, render_template, jsonify, request
+from Flask import Flask, render_template, jsonify, request
 import json
 import os
 import logging
@@ -118,8 +118,8 @@ if __name__ == '__main__':
     print("=" * 60)
     print("🎮 電流急急棒遊戲 - Flask 伺服器")
     print("=" * 60)
-    print("\n📍 訪問地址: http://127.0.0.1:5000")
-    print("\n🎵 音樂配置:")
+    print(" 訪問地址: http://127.0.0.1:5000")
+    print(" 音樂配置:")
     print("   位置: static/music/ 資料夾")
     print("   - 背景音樂: background.mp3")
     print("   - 成功音樂: success.mp3")
